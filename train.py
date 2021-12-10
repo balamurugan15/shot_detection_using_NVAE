@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import os
+from tqdm.notebook import tqdm
 
 import torch.distributed as dist
 from torch.multiprocessing import Process
@@ -92,7 +93,7 @@ def main(args):
         logging.info('epoch %d', epoch)
 
         # Training.
-        train_nelbo, global_step = train(train_queue, model, cnn_optimizer, grad_scalar, global_step, warmup_iters, writer, logging)
+        train_nelbo, global_step = train(train_queue, model, cnn_optimizer, grad_scalar, global_step, warmup_iters, writer, args, logging)
         logging.info('train_nelbo %f', train_nelbo)
         writer.add_scalar('train/nelbo', train_nelbo, global_step)
 
@@ -130,7 +131,7 @@ def main(args):
                             'grad_scalar': grad_scalar.state_dict()}, checkpoint_file)
 
     # Final validation
-    valid_neg_log_p, valid_nelbo = test(valid_queue, model, num_samples=1000, args=args, logging=logging)
+    valid_neg_log_p, valid_nelbo = test(valid_queue, model, num_samples=1000, logging=logging)
     logging.info('final valid nelbo %f', valid_nelbo)
     logging.info('final valid neg log p %f', valid_neg_log_p)
     writer.add_scalar('val/neg_log_p', valid_neg_log_p, epoch + 1)
@@ -140,14 +141,16 @@ def main(args):
     writer.close()
 
 
-def train(train_queue, model, cnn_optimizer, grad_scalar, global_step, warmup_iters, writer, logging):
+def train(train_queue, model, cnn_optimizer, grad_scalar, global_step, warmup_iters, writer, args, logging):
     alpha_i = utils.kl_balancer_coeff(num_scales=model.num_latent_scales,
                                       groups_per_scale=model.groups_per_scale, fun='square')
     nelbo = utils.AvgrageMeter()
     model.train()
-    for step, x in enumerate(train_queue):
+    for step, x in tqdm(enumerate(train_queue)):
+        # print('Length X', len(x))
         x = x[0] if len(x) > 1 else x
         x = x.cuda()
+        # print('X shape', x.shape)
 
         # change bit length
         x = utils.pre_process(x, args.num_x_bits)
@@ -192,7 +195,7 @@ def train(train_queue, model, cnn_optimizer, grad_scalar, global_step, warmup_it
         grad_scalar.step(cnn_optimizer)
         grad_scalar.update()
         nelbo.update(loss.data, 1)
-
+        
         if (global_step + 1) % 100 == 0:
             if (global_step + 1) % 1000 == 0:  # reduced frequency
                 n = int(np.floor(np.sqrt(x.size(0))))
@@ -340,7 +343,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='mnist',
                         choices=['cifar10', 'mnist', 'omniglot', 'celeba_64', 'celeba_256',
                                  'imagenet_32', 'ffhq', 'lsun_bedroom_128', 'stacked_mnist',
-                                 'lsun_church_128', 'lsun_church_64'],
+                                 'lsun_church_128', 'lsun_church_64','knnw'],  #-------------------
                         help='which dataset to use')
     parser.add_argument('--data', type=str, default='/tmp/nasvae/data',
                         help='location of the data corpus')

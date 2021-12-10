@@ -19,6 +19,8 @@ import urllib
 from lmdb_datasets import LMDBDataset
 from thirdparty.lsun import LSUN
 
+from sklearn.model_selection import train_test_split  #-------
+
 
 class StackedMNIST(dset.MNIST):
     def __init__(self, root, train=True, transform=None, target_transform=None,
@@ -126,6 +128,32 @@ class OMNIGLOT(Dataset):
     def __len__(self):
         return len(self.data)
 
+#--------------------------------- our dataset-------------
+
+class MyImageFolder(dset.ImageFolder):
+    def __getitem__(self, index):
+        return super(MyImageFolder, self).__getitem__(index) #return image path
+
+
+class KNNWDataset(Dataset):
+  def __init__(self,X, transform_train):
+    X = np.load(X, allow_pickle=True)
+    train_data, _ = train_test_split(X, test_size=0.2, shuffle=False)
+    self.x = train_data
+    self.transform = transform_train
+    # self.transform = transform
+
+  def __len__(self):
+    return len(self.x)
+
+  def __getitem__(self,index):
+    x = self.x[index]
+    # x = x/255
+    x = self.transform(x).permute(1,2,0)
+    return (x, 0)
+
+#----------------------------------------------
+
 def get_loaders_eval(dataset, args):
     """Get train and valid loaders for cifar10/tiny imagenet."""
 
@@ -206,6 +234,26 @@ def get_loaders_eval(dataset, args):
         train_transform, valid_transform = _data_transforms_generic(resize)
         train_data = LMDBDataset(root=args.data, name='ffhq', train=True, transform=train_transform)
         valid_data = LMDBDataset(root=args.data, name='ffhq', train=False, transform=valid_transform)
+      #-----------------------------------
+    elif dataset.startswith('knnw'):
+        num_classes = 0
+
+        train_transform, _ = _data_transforms_knnw()
+
+        train_data = KNNWDataset(args.data, train_transform)
+
+        # train_data, valid_data = train_test_split(total_data, test_size=0.2, shuffle=False)
+
+        # train_data = total_data
+        # train_data = MyImageFolder(root=args.data, 
+                              # transform=train_transform)   # content/qscale_31
+
+        # train_data = torch.utils.data.DataLoader(verif_dataset, batch_size=args.batch_size, 
+                                            #  shuffle=False, num_workers=2)
+
+        valid_data = train_data
+        
+      #--------------------------------------------------
     else:
         raise NotImplementedError
 
@@ -288,6 +336,20 @@ def _data_transforms_generic(size):
 
     return train_transform, valid_transform
 
+    #----------------------------
+def _data_transforms_knnw():
+    train_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.RandomHorizontalFlip(),
+    ])
+
+    valid_transform = transforms.Compose([
+        transforms.ToTensor(),
+    ])
+
+    return train_transform, valid_transform
+
+#---------------------------------------
 
 def _data_transforms_celeba64(size):
     train_transform = transforms.Compose([

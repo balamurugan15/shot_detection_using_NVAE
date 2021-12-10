@@ -362,7 +362,7 @@ class AutoEncoder(nn.Module):
         param0 = self.enc_sampler[idx_dec](ftr)
         mu_q, log_sig_q = torch.chunk(param0, 2, dim=1)
 
-        # return mu_q, log_sig_q           # returning mu and log_sigma for enocding -----------------
+        return mu_q, log_sig_q           # returning mu and log_sigma for enocding -----------------
         dist = Normal(mu_q, log_sig_q)   # for the first approx. posterior
         z, _ = dist.sample()
         log_q_conv = dist.log_p(z)
